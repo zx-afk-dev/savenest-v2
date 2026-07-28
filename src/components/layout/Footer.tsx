@@ -1,0 +1,49 @@
+import Link from 'next/link';
+import { FOOTER_LINKS, SITE_NAME, SITE_TAGLINE } from '@/lib/constants';
+
+export function Footer() {
+  const year = new Date().getFullYear();
+
+  return (
+    <footer className="mt-24 border-t border-white/50 bg-white/40 backdrop-blur">
+      <div className="mx-auto max-w-6xl px-5 py-12">
+        <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-sm">
+            <span className="font-display text-lg font-bold text-ink-900">{SITE_NAME}</span>
+            <p className="mt-2 text-sm leading-relaxed text-ink-800/70">{SITE_TAGLINE}</p>
+          </div>
+
+          <nav aria-label="Tautan footer">
+            <ul className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm sm:grid-cols-3">
+              {FOOTER_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="text-ink-800/70 hover:text-brand-700">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+              <li>
+                <a
+                  href="https://github.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-ink-800/70 hover:text-brand-700"
+                >
+                  GitHub
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+
+        <div className="mt-10 flex flex-col gap-2 border-t border-mist-200 pt-6 text-xs text-ink-800/60 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            &copy; {year} {SITE_NAME}. Seluruh hak cipta konten yang diunduh tetap menjadi milik
+            pemiliknya masing-masing.
+          </p>
+          <p>Dibuat dengan Uang Jokowi.</p>
+        </div>
+      </div>
+    </footer>
+  );
+}
