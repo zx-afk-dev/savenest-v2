@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NEXT_TELEMETRY_DISABLED = "1"
+  NODE_VERSION = "20"
+
+# Internal API routes are dynamic (rate limiting, cache, proxy) — never cache them at the edge.
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# /sitemap.xml and /robots.txt are served directly by Next.js pages
+# (src/pages/sitemap.xml.tsx and src/pages/robots.txt.tsx) — no redirect needed.
