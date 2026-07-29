@@ -5,11 +5,11 @@ import { breadcrumbSchema } from '@/lib/seo';
 import { SITE_NAME } from '@/lib/constants';
 
 const CREDITS = [
-  { name: 'Next.js', role: 'React framework' },
-  { name: 'Tailwind CSS', role: 'Styling & design system' },
-  { name: 'Netlify', role: 'Hosting & serverless functions' },
-  { name: 'Netlify Blobs', role: 'Key-value storage for quota & cache' },
-  { name: 'api.blckrose.my.id', role: 'Penyedia data unduhan (upstream API)' },
+  { name: 'Modern Web Framework', role: 'Fondasi aplikasi & rendering halaman' },
+  { name: 'Utility-First Styling', role: 'Sistem desain & antarmuka' },
+  { name: 'Cloud Hosting Partner', role: 'Hosting & infrastruktur serverless' },
+  { name: 'Key-Value Storage', role: 'Penyimpanan kuota harian & cache' },
+  { name: 'Data Provider Partners', role: 'Penyedia data pengambilan media' },
 ];
 
 const TqtoPage: NextPage = () => {

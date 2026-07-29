@@ -32,11 +32,11 @@ const TermsPage: NextPage = () => {
           Layanan memiliki kuota harian bersama yang berlaku untuk seluruh pengguna dan dapat
           berubah sewaktu-waktu. {SITE_NAME} tidak menjamin ketersediaan layanan tanpa gangguan.
         </p>
-        <h2>3. Konten Pihak Ketiga</h2>
+        <h2>3. Konten dari Platform Asal</h2>
         <p>
-          Data media diambil dari layanan pihak ketiga. {SITE_NAME} tidak bertanggung jawab atas
-          keakuratan, ketersediaan, atau legalitas konten yang diproses melalui layanan pihak
-          ketiga tersebut.
+          Data media yang ditampilkan berasal dari platform asal video (TikTok, Instagram,
+          YouTube). {SITE_NAME} tidak bertanggung jawab atas keakuratan, ketersediaan, atau
+          legalitas konten tersebut.
         </p>
         <h2>4. Perubahan Ketentuan</h2>
         <p>

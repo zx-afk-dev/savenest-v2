@@ -16,7 +16,7 @@ const DisclaimerPage: NextPage = () => {
       <PageShell title="Disclaimer">
         <p>
           {SITE_NAME} adalah alat bantu teknis yang mempermudah pengambilan tautan media dari
-          platform pihak ketiga (TikTok, Instagram, YouTube) melalui API publik. {SITE_NAME}:
+          platform TikTok, Instagram, dan YouTube. {SITE_NAME}:
         </p>
         <ul>
           <li>Tidak berafiliasi dengan, disponsori oleh, atau didukung oleh TikTok, Instagram/Meta, maupun YouTube/Google.</li>

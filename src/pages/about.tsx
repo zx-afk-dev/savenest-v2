@@ -24,10 +24,9 @@ const AboutPage: NextPage = () => {
         </p>
         <h2>Bagaimana cara kerjanya?</h2>
         <p>
-          Saat kamu menempelkan URL video, {SITE_NAME} memvalidasi tautan tersebut lalu meminta
-          data medianya dari penyedia layanan pihak ketiga. Kami tidak melakukan scraping sendiri
-          dan tidak menyimpan file video apa pun di server kami — setiap unduhan mengalir langsung
-          dari sumber ke perangkatmu.
+          Saat kamu menempelkan URL video, {SITE_NAME} memvalidasi tautan tersebut lalu memproses
+          permintaanmu melalui sistem internal kami. Kami tidak menyimpan file video apa pun di
+          server — setiap unduhan mengalir langsung ke perangkatmu.
         </p>
         <h2>Komitmen kami</h2>
         <ul>

@@ -20,7 +20,7 @@ const PrivacyPage: NextPage = () => {
           secara permanen. URL yang kamu masukkan hanya diproses sementara untuk:
         </p>
         <ul>
-          <li>Diteruskan ke API penyedia data video pihak ketiga.</li>
+          <li>Diproses oleh sistem internal kami untuk mengambil data video yang diminta.</li>
           <li>Disimpan singkat (maksimal 10 menit) di cache untuk mempercepat permintaan berulang.</li>
           <li>Dihitung secara agregat untuk kuota harian bersama — tanpa dikaitkan dengan identitas kamu.</li>
         </ul>
@@ -30,11 +30,10 @@ const PrivacyPage: NextPage = () => {
           IP dan user agent) sementara, semata-mata untuk keperluan keamanan seperti pembatasan
           laju permintaan (rate limiting) dan deteksi bot.
         </p>
-        <h2>Pihak Ketiga</h2>
+        <h2>Platform Asal Konten</h2>
         <p>
-          File media yang diunduh berasal langsung dari server penyedia layanan pihak ketiga.
-          Kebijakan privasi platform asal (TikTok, Instagram, YouTube) tetap berlaku atas konten
-          tersebut.
+          File media yang diunduh berasal langsung dari server platform asalnya. Kebijakan privasi
+          platform asal (TikTok, Instagram, YouTube) tetap berlaku atas konten tersebut.
         </p>
         <h2>Cookie</h2>
         <p>{SITE_NAME} tidak menggunakan cookie pelacakan pihak ketiga untuk keperluan iklan.</p>
