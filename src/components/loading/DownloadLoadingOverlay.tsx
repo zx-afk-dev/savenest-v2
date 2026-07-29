@@ -138,5 +138,4 @@ function CourierScene({ badge }: { badge: string }) {
       </svg>
     </div>
   );
-        }
-        
+}
