@@ -21,6 +21,15 @@ export const IP_RATE_LIMIT_WINDOW_SECONDS = Number(
 );
 export const IP_COOLDOWN_SECONDS = Number(process.env.IP_COOLDOWN_SECONDS ?? 5);
 
+// The AI support chat gets its own independent rate-limit bucket so chatting
+// doesn't throttle a person's ability to click Download, and vice versa.
+export const CHAT_RATE_LIMIT_MAX = Number(process.env.CHAT_RATE_LIMIT_MAX ?? 8);
+export const CHAT_RATE_LIMIT_WINDOW_SECONDS = Number(
+  process.env.CHAT_RATE_LIMIT_WINDOW_SECONDS ?? 60,
+);
+export const CHAT_COOLDOWN_SECONDS = Number(process.env.CHAT_COOLDOWN_SECONDS ?? 3);
+export const CHAT_MAX_PROMPT_LENGTH = 500;
+
 export const REQUEST_TIMEOUT_MS = 15_000;
 
 export const LOADING_MESSAGES = [
