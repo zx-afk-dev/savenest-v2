@@ -3,6 +3,15 @@ Generates SaveNest's PWA icons, favicon, apple-touch-icon, and OG cover image
 using only Pillow (no network access, no external image-generation tool).
 The mark is the same "arrow into a nest/tray" glyph used in Header.tsx,
 rendered flat so it reads clearly at small sizes.
+
+This is a dev-only utility — it is never run during `npm install`, `npm run
+build`, or the Netlify deploy pipeline, so it has no effect on the deployed
+app. Re-run it only when you want to regenerate the icon set (e.g. after
+changing the brand mark or color).
+
+Usage:
+    pip install -r scripts/requirements.txt
+    python3 scripts/generate-icons.py
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -154,4 +163,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
