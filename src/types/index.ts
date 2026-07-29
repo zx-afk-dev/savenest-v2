@@ -69,3 +69,35 @@ export interface GlobalStatsApiResponse {
   success: true;
   data: GlobalStats;
 }
+
+// --- AI support chat -------------------------------------------------------
+
+export interface ChatReply {
+  reply: string;
+  chatId: string;
+  /** Present when the user's message contained a video URL that was successfully processed. */
+  download?: DownloadResult;
+}
+
+export interface ChatApiSuccessShape {
+  success: true;
+  data: ChatReply;
+}
+
+export interface ChatApiErrorShape {
+  success: false;
+  code: ChatErrorCode;
+  message: string;
+}
+
+export type ChatApiResponse = ChatApiSuccessShape | ChatApiErrorShape;
+
+export type ChatErrorCode =
+  | 'VALIDATION_FAILED'
+  | 'RATE_LIMITED'
+  | 'GLOBAL_QUOTA_EXCEEDED'
+  | 'ORIGIN_NOT_ALLOWED'
+  | 'BOT_DETECTED'
+  | 'UPSTREAM_ERROR'
+  | 'UPSTREAM_TIMEOUT'
+  | 'INTERNAL_ERROR';
