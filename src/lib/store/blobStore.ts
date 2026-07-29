@@ -137,5 +137,4 @@ export function getBlobStore(storeName: string): BlobStore {
 
   stores.set(storeName, store);
   return store;
-  }
-    
+}

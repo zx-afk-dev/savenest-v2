@@ -86,4 +86,4 @@ export async function tryConsumeGlobalQuota(): Promise<{
       resetsAt: nextResetAtIso(new Date()),
     },
   };
-      }
+}
