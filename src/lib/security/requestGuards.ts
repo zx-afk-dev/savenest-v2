@@ -1,12 +1,51 @@
 import type { NextApiRequest } from 'next';
-import { SITE_URL } from '@/lib/constants';
 
-function getAllowedOrigins(): string[] {
+/**
+ * Extra origins to trust *in addition to* the domain actually serving the
+ * request (see `getSelfOrigin` below). Optional — most deployments never
+ * need this. Useful if you want a separate marketing/staging domain to be
+ * allowed to call this API too.
+ */
+function getExtraAllowedOrigins(): string[] {
   const fromEnv = process.env.ALLOWED_ORIGINS;
-  if (fromEnv) {
-    return fromEnv.split(',').map((o) => o.trim());
-  }
-  return [SITE_URL];
+  if (!fromEnv) return [];
+  return fromEnv
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+}
+
+/**
+ * The origin that is actually serving this request right now, derived from
+ * the Host header Netlify forwards to the function. This is what a same-site
+ * browser fetch/XHR call will always send as `Origin` — regardless of
+ * whether the app is running on its final custom domain, Netlify's default
+ * `*.netlify.app` subdomain, a deploy-preview URL, or `localhost` during
+ * development. Checking against this (rather than only a single hardcoded
+ * configured URL) is what makes origin validation work correctly out of the
+ * box on every deployment, without needing an env var to be kept in sync.
+ */
+function getSelfOrigin(req: NextApiRequest): string | null {
+  const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host;
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  if (!host) return null;
+
+  const protoHeader = req.headers['x-forwarded-proto'];
+  const proto = (Array.isArray(protoHeader) ? protoHeader[0] : protoHeader)?.split(',')[0]?.trim();
+
+  return `${proto || 'https'}://${host}`;
+}
+
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function isTrustedOrigin(req: NextApiRequest, candidate: string): boolean {
+  const normalizedCandidate = normalizeOrigin(candidate);
+  const selfOrigin = getSelfOrigin(req);
+
+  if (selfOrigin && normalizedCandidate === normalizeOrigin(selfOrigin)) return true;
+  return getExtraAllowedOrigins().some((o) => normalizeOrigin(o) === normalizedCandidate);
 }
 
 export interface GuardResult {
@@ -16,25 +55,30 @@ export interface GuardResult {
 
 /**
  * Requires that browser-sent requests carry an Origin or Referer header that
- * matches this site. Direct server-to-server calls (no browser) won't send
- * these headers at all — we treat a *mismatched* value as a hard fail, but
- * a completely missing Origin/Referer is tolerated on same-site navigations
- * where some browsers omit it (e.g. Safari's strict referrer policy).
+ * matches the site actually serving this request. Direct server-to-server
+ * calls (no browser) won't send these headers at all — we treat a
+ * *mismatched* value as a hard fail, but a completely missing Origin/Referer
+ * is tolerated on same-site navigations where some browsers omit it (e.g.
+ * Safari's strict referrer policy).
  */
 export function validateOriginAndReferer(req: NextApiRequest): GuardResult {
-  const allowed = getAllowedOrigins();
   const origin = req.headers.origin;
   const referer = req.headers.referer;
 
   if (origin) {
-    const isAllowed = allowed.some((o) => origin === o || origin.startsWith(o));
-    if (!isAllowed) return { passed: false, reason: 'ORIGIN_NOT_ALLOWED' };
+    if (!isTrustedOrigin(req, origin)) return { passed: false, reason: 'ORIGIN_NOT_ALLOWED' };
     return { passed: true };
   }
 
   if (referer) {
-    const isAllowed = allowed.some((o) => referer.startsWith(o));
-    if (!isAllowed) return { passed: false, reason: 'ORIGIN_NOT_ALLOWED' };
+    try {
+      const refererOrigin = new URL(referer).origin;
+      if (!isTrustedOrigin(req, refererOrigin)) {
+        return { passed: false, reason: 'ORIGIN_NOT_ALLOWED' };
+      }
+    } catch {
+      return { passed: false, reason: 'ORIGIN_NOT_ALLOWED' };
+    }
     return { passed: true };
   }
 
@@ -99,12 +143,13 @@ export function validateHeaders(req: NextApiRequest): GuardResult {
   return { passed: true };
 }
 
-export function corsHeadersFor(origin: string | undefined): Record<string, string> {
-  const allowed = getAllowedOrigins();
-  const isAllowed = Boolean(origin && allowed.some((o) => origin === o || origin.startsWith(o)));
+export function corsHeadersFor(req: NextApiRequest): Record<string, string> {
+  const origin = req.headers.origin;
+  const selfOrigin = getSelfOrigin(req);
+  const allowOrigin = origin && isTrustedOrigin(req, origin) ? origin : (selfOrigin ?? '');
 
   return {
-    'Access-Control-Allow-Origin': isAllowed ? (origin as string) : allowed[0]!,
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Requested-With',
     Vary: 'Origin',

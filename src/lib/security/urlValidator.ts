@@ -76,3 +76,22 @@ export function validateSupportedUrl(raw: string): UrlValidationResult {
 export function sanitizeInput(value: string): string {
   return value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
 }
+
+const URL_TOKEN_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
+
+/**
+ * Scans free-form text (e.g. a chat message) for the first embedded URL that
+ * belongs to a supported platform, so features like the AI chat can detect
+ * "tolong download https://tiktok.com/... ya" without requiring the whole
+ * message to be nothing but a URL.
+ */
+export function extractSupportedUrl(text: string): UrlValidationResult {
+  const candidates = text.match(URL_TOKEN_PATTERN) ?? [];
+  for (const candidate of candidates) {
+    // Trim common trailing punctuation a user might have typed after the link.
+    const trimmed = candidate.replace(/[.,!?)\]]+$/, '');
+    const result = validateSupportedUrl(trimmed);
+    if (result.valid) return result;
+  }
+  return { valid: false };
+}

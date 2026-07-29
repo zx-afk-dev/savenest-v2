@@ -1,9 +1,4 @@
 import type { NextApiRequest } from 'next';
-import {
-  IP_COOLDOWN_SECONDS,
-  IP_RATE_LIMIT_MAX,
-  IP_RATE_LIMIT_WINDOW_SECONDS,
-} from '@/lib/constants';
 
 /**
  * In-memory, per-Function-instance rate limiting.
@@ -14,31 +9,37 @@ import {
  * intentionally NOT a substitute for the durable, cross-instance GLOBAL
  * quota (see globalQuota.ts, which uses Netlify Blobs) — that one is the
  * source of truth for "60 requests/day total". This one only protects
- * against a single client hammering the endpoint faster than a human could.
+ * against a single client hammering an endpoint faster than a human could.
+ *
+ * Buckets are namespaced by `scope` (e.g. "download", "chat") so that, say,
+ * someone chatting a lot with the AI assistant doesn't get throttled out of
+ * clicking the Download button, and vice versa — each endpoint gets its own
+ * independent counters even though they share this same module.
  */
 
 interface IpRecord {
   timestamps: number[];
-  lastUrlHash: string | null;
+  lastKeyHash: string | null;
   lastRequestAt: number;
   inFlight: boolean;
 }
 
 const ipRecords = new Map<string, IpRecord>();
 
-// Periodically forget IPs we haven't seen in a while so the map can't grow
-// unbounded over a long-lived warm instance.
-const MAX_TRACKED_IPS = 5000;
+// Periodically forget entries we haven't seen in a while so the map can't
+// grow unbounded over a long-lived warm instance.
+const MAX_TRACKED_ENTRIES = 5000;
 
-function getRecord(ip: string): IpRecord {
-  let record = ipRecords.get(ip);
+function getRecord(scope: string, ip: string): IpRecord {
+  const bucketKey = `${scope}:${ip}`;
+  let record = ipRecords.get(bucketKey);
   if (!record) {
-    record = { timestamps: [], lastUrlHash: null, lastRequestAt: 0, inFlight: false };
-    if (ipRecords.size >= MAX_TRACKED_IPS) {
+    record = { timestamps: [], lastKeyHash: null, lastRequestAt: 0, inFlight: false };
+    if (ipRecords.size >= MAX_TRACKED_ENTRIES) {
       const oldestKey = ipRecords.keys().next().value;
       if (oldestKey) ipRecords.delete(oldestKey);
     }
-    ipRecords.set(ip, record);
+    ipRecords.set(bucketKey, record);
   }
   return record;
 }
@@ -64,27 +65,40 @@ export interface RateLimitCheck {
   retryAfterSeconds?: number;
 }
 
-/** Simple, dependency-free string hash for comparing "same URL" cheaply. */
-function hashUrl(url: string): string {
+export interface RateLimitOptions {
+  max: number;
+  windowSeconds: number;
+  cooldownSeconds: number;
+}
+
+/** Simple, dependency-free string hash for comparing "same request" cheaply. */
+function hashKey(value: string): string {
   let hash = 0;
-  for (let i = 0; i < url.length; i++) {
-    hash = (hash * 31 + url.charCodeAt(i)) | 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
   }
   return hash.toString(36);
 }
 
 /**
  * Checks sliding-window rate limit, request cooldown, and duplicate
- * in-flight requests for a single client IP + URL pair.
+ * in-flight requests for a single client IP within a given scope. `key` is
+ * whatever the endpoint wants to treat as "the same request" for cooldown/
+ * duplicate purposes — a video URL for downloads, a chat message for chat.
  */
-export function checkIpRateLimit(ip: string, url: string): RateLimitCheck {
+export function checkIpRateLimit(
+  scope: string,
+  ip: string,
+  key: string,
+  options: RateLimitOptions,
+): RateLimitCheck {
   const now = Date.now();
-  const record = getRecord(ip);
-  const windowMs = IP_RATE_LIMIT_WINDOW_SECONDS * 1000;
+  const record = getRecord(scope, ip);
+  const windowMs = options.windowSeconds * 1000;
 
   record.timestamps = record.timestamps.filter((t) => now - t < windowMs);
 
-  if (record.timestamps.length >= IP_RATE_LIMIT_MAX) {
+  if (record.timestamps.length >= options.max) {
     const oldest = record.timestamps[0]!;
     return {
       allowed: false,
@@ -93,32 +107,32 @@ export function checkIpRateLimit(ip: string, url: string): RateLimitCheck {
     };
   }
 
-  const urlHash = hashUrl(url);
+  const keyHash = hashKey(key);
   const sinceLast = (now - record.lastRequestAt) / 1000;
-  if (record.lastUrlHash === urlHash && sinceLast < IP_COOLDOWN_SECONDS) {
+  if (record.lastKeyHash === keyHash && sinceLast < options.cooldownSeconds) {
     return {
       allowed: false,
       reason: 'COOLDOWN',
-      retryAfterSeconds: Math.ceil(IP_COOLDOWN_SECONDS - sinceLast),
+      retryAfterSeconds: Math.ceil(options.cooldownSeconds - sinceLast),
     };
   }
 
-  if (record.inFlight && record.lastUrlHash === urlHash) {
+  if (record.inFlight && record.lastKeyHash === keyHash) {
     return { allowed: false, reason: 'DUPLICATE_IN_FLIGHT' };
   }
 
   return { allowed: true };
 }
 
-export function markRequestStart(ip: string, url: string): void {
-  const record = getRecord(ip);
+export function markRequestStart(scope: string, ip: string, key: string): void {
+  const record = getRecord(scope, ip);
   record.timestamps.push(Date.now());
-  record.lastUrlHash = hashUrl(url);
+  record.lastKeyHash = hashKey(key);
   record.lastRequestAt = Date.now();
   record.inFlight = true;
 }
 
-export function markRequestEnd(ip: string): void {
-  const record = ipRecords.get(ip);
+export function markRequestEnd(scope: string, ip: string): void {
+  const record = ipRecords.get(`${scope}:${ip}`);
   if (record) record.inFlight = false;
 }
