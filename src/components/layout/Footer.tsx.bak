@@ -41,6 +41,7 @@ export function Footer() {
             &copy; {year} {SITE_NAME}. Seluruh hak cipta konten yang diunduh tetap menjadi milik
             pemiliknya masing-masing.
           </p>
+          <p>Dibuat dengan Next.js &amp; Tailwind CSS.</p>
         </div>
       </div>
     </footer>
