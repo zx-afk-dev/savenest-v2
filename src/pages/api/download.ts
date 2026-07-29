@@ -17,6 +17,7 @@ import {
 import { tryConsumeGlobalQuota } from '@/lib/store/globalQuota';
 import { getCached, setCached } from '@/lib/cache/cacheStore';
 import { fetchFromUpstream, UpstreamError } from '@/lib/api/blckrose';
+import { IP_COOLDOWN_SECONDS, IP_RATE_LIMIT_MAX, IP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
 
 // Body payload validation (defense in depth on top of validateSupportedUrl).
 const RequestBodySchema = z.object({
@@ -37,7 +38,7 @@ export default async function handler(
   res: NextApiResponse<DownloadApiResponse>,
 ) {
   // --- CORS / preflight -----------------------------------------------
-  const corsHeaders = corsHeadersFor(req.headers.origin);
+  const corsHeaders = corsHeadersFor(req);
   Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
 
   if (req.method === 'OPTIONS') {
@@ -83,7 +84,11 @@ export default async function handler(
 
   // --- Per-IP rate limit, cooldown, duplicate-request guard --------------
   const ip = getClientIp(req);
-  const rateLimit = checkIpRateLimit(ip, targetUrl);
+  const rateLimit = checkIpRateLimit('download', ip, targetUrl, {
+    max: IP_RATE_LIMIT_MAX,
+    windowSeconds: IP_RATE_LIMIT_WINDOW_SECONDS,
+    cooldownSeconds: IP_COOLDOWN_SECONDS,
+  });
   if (!rateLimit.allowed) {
     res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds ?? 5));
     fail(
@@ -96,7 +101,7 @@ export default async function handler(
     );
     return;
   }
-  markRequestStart(ip, targetUrl);
+  markRequestStart('download', ip, targetUrl);
 
   try {
     // --- Cache lookup ------------------------------------------------
@@ -141,7 +146,7 @@ export default async function handler(
     }
     fail(res, 500, 'INTERNAL_ERROR', 'Terjadi kesalahan pada server.');
   } finally {
-    markRequestEnd(ip);
+    markRequestEnd('download', ip);
   }
 }
 
@@ -150,4 +155,3 @@ export const config = {
     bodyParser: { sizeLimit: '10kb' }, // payload is just a URL string — keep this tight
   },
 };
-    
