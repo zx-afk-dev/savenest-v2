@@ -1,4 +1,20 @@
 <?xml version="1.0"?>
+<!--
+  This is a PLACEHOLDER. To verify SaveNest with Bing Webmaster Tools using
+  the "XML file" method (covers Yahoo Search & DuckDuckGo too, since both
+  run on Bing's index):
+
+  1. Go to https://www.bing.com/webmasters, add https://savenest.web.id
+  2. Choose the "XML file" verification method
+  3. Download the BingSiteAuth.xml file Bing gives you
+  4. Replace THIS file (public/BingSiteAuth.xml) with that one, keeping the
+     same filename, then redeploy
+  5. Click "Verify" in Bing Webmaster Tools
+
+  Alternative: use the meta-tag method instead by setting the
+  NEXT_PUBLIC_BING_SITE_VERIFICATION env var (see .env.example) — you only
+  need one of the two methods, not both.
+-->
 <users>
-	<user>809B376A4BE15575865C01BA9C8A8B5F</user>
+  <user>REPLACE-WITH-YOUR-REAL-BING-VERIFICATION-CODE</user>
 </users>
