@@ -72,9 +72,15 @@ export interface GlobalStatsApiResponse {
 
 // --- AI support chat -------------------------------------------------------
 
+/** One prior turn in the conversation, sent by the client so the (stateless)
+ * Gemini API has context — SaveNest itself never stores this server-side. */
+export interface ChatHistoryItem {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface ChatReply {
   reply: string;
-  chatId: string;
   /** Present when the user's message contained a video URL that was successfully processed. */
   download?: DownloadResult;
 }
