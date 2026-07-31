@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useChat } from '@/hooks/useChat';
+import { useTurnstile } from '@/hooks/useTurnstile';
 import { InlineMarkdown } from '@/components/common/InlineMarkdown';
 import { ResultCard } from '@/components/home/ResultCard';
 import { SITE_NAME } from '@/lib/constants';
@@ -8,6 +9,7 @@ export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const { messages, sendMessage, isLoading } = useChat();
+  const turnstile = useTurnstile();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +22,8 @@ export function ChatWidget() {
     const text = input.trim();
     if (!text) return;
     setInput('');
-    void sendMessage(text);
+    void sendMessage(text, turnstile.token);
+    turnstile.reset(); // single-use token — line up a fresh one for next time
   }
 
   return (
@@ -140,6 +143,8 @@ export function ChatWidget() {
             <p className="mt-2 text-center text-[10px] text-ink-800/40">
               Setiap pesan menggunakan kuota harian yang sama dengan tombol Download.
             </p>
+            {/* Usually renders nothing visible — see README's Cloudflare Turnstile section. */}
+            <div ref={turnstile.containerRef} />
           </form>
         </div>
       )}
@@ -173,4 +178,4 @@ export function ChatWidget() {
       </button>
     </>
   );
-                  }
+}
