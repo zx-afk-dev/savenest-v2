@@ -17,11 +17,15 @@ import {
 import { tryConsumeGlobalQuota } from '@/lib/store/globalQuota';
 import { getCached, setCached } from '@/lib/cache/cacheStore';
 import { fetchFromUpstream, UpstreamError } from '@/lib/api/blckrose';
+import { verifyTurnstile } from '@/lib/security/turnstile';
 import { IP_COOLDOWN_SECONDS, IP_RATE_LIMIT_MAX, IP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
 
 // Body payload validation (defense in depth on top of validateSupportedUrl).
 const RequestBodySchema = z.object({
   url: z.string().min(1).max(2048),
+  // Optional: only present/checked when Cloudflare Turnstile is configured
+  // (see turnstile.ts) — omitted entirely when the feature is off.
+  turnstileToken: z.string().max(4096).optional(),
 });
 
 function fail(
@@ -73,6 +77,14 @@ export default async function handler(
     fail(res, 400, 'VALIDATION_FAILED', 'Payload request tidak valid.');
     return;
   }
+
+  // --- Cloudflare Turnstile (no-op if TURNSTILE_SECRET_KEY isn't set) -----
+  const turnstileCheck = await verifyTurnstile(req, parsedBody.data.turnstileToken);
+  if (!turnstileCheck.passed) {
+    fail(res, 403, 'BOT_DETECTED', 'Verifikasi keamanan gagal. Muat ulang halaman dan coba lagi.');
+    return;
+  }
+
   const cleanedInput = sanitizeInput(parsedBody.data.url);
 
   const urlCheck = validateSupportedUrl(cleanedInput);

@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { ChatApiResponse, ChatErrorCode } from '@/types';
+import type { ChatApiResponse, ChatErrorCode, ChatHistoryItem } from '@/types';
 import { extractSupportedUrl, sanitizeInput } from '@/lib/security/urlValidator';
 import {
   validateHeaders,
@@ -18,8 +17,9 @@ import {
 import { tryConsumeGlobalQuota } from '@/lib/store/globalQuota';
 import { getCached, setCached } from '@/lib/cache/cacheStore';
 import { fetchFromUpstream, UpstreamError } from '@/lib/api/blckrose';
-import { fetchChatReply, ChatUpstreamError } from '@/lib/api/theresav';
-import { buildScopedPrompt, type ChatGrounding } from '@/lib/ai/scopedPrompt';
+import { fetchGeminiReply, GeminiError, type GeminiTurn } from '@/lib/api/gemini';
+import { buildSystemInstruction, type ChatGrounding } from '@/lib/ai/scopedPrompt';
+import { verifyTurnstile } from '@/lib/security/turnstile';
 import {
   CHAT_COOLDOWN_SECONDS,
   CHAT_MAX_PROMPT_LENGTH,
@@ -27,15 +27,21 @@ import {
   CHAT_RATE_LIMIT_WINDOW_SECONDS,
 } from '@/lib/constants';
 
-const RequestBodySchema = z.object({
-  message: z.string().min(1).max(CHAT_MAX_PROMPT_LENGTH),
-  // Client-generated conversation id (kept in the browser only — SaveNest
-  // has no database/accounts). Loosely validated; a missing/malformed one is
-  // simply replaced with a fresh id rather than treated as a hard error.
-  chatId: z.string().max(64).optional(),
+// Only the last few turns are sent to Gemini — enough for short-term
+// context in a support chat, without letting the request grow unbounded.
+const MAX_HISTORY_TURNS = 8;
+
+const HistoryItemSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().max(CHAT_MAX_PROMPT_LENGTH),
 });
 
-const CHAT_ID_PATTERN = /^[a-zA-Z0-9-]{8,64}$/;
+const RequestBodySchema = z.object({
+  message: z.string().min(1).max(CHAT_MAX_PROMPT_LENGTH),
+  history: z.array(HistoryItemSchema).max(40).optional(),
+  // Optional: only present/checked when Cloudflare Turnstile is configured.
+  turnstileToken: z.string().max(4096).optional(),
+});
 
 function fail(
   res: NextApiResponse<ChatApiResponse>,
@@ -44,6 +50,16 @@ function fail(
   message: string,
 ) {
   res.status(status).json({ success: false, code, message });
+}
+
+function toGeminiTurns(history: ChatHistoryItem[] | undefined, userMessage: string): GeminiTurn[] {
+  const trimmedHistory = (history ?? []).slice(-MAX_HISTORY_TURNS);
+  const turns: GeminiTurn[] = trimmedHistory.map((item) => ({
+    role: item.role === 'assistant' ? 'model' : 'user',
+    text: item.content,
+  }));
+  turns.push({ role: 'user', text: userMessage });
+  return turns;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ChatApiResponse>) {
@@ -79,16 +95,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     return;
   }
 
+  // --- Cloudflare Turnstile (no-op if TURNSTILE_SECRET_KEY isn't set) -----
+  const turnstileCheck = await verifyTurnstile(req, parsedBody.data.turnstileToken);
+  if (!turnstileCheck.passed) {
+    fail(res, 403, 'BOT_DETECTED', 'Verifikasi keamanan gagal. Muat ulang halaman dan coba lagi.');
+    return;
+  }
+
   const userMessage = sanitizeInput(parsedBody.data.message);
   if (!userMessage) {
     fail(res, 400, 'VALIDATION_FAILED', 'Pesan tidak boleh kosong.');
     return;
   }
-
-  const chatId =
-    parsedBody.data.chatId && CHAT_ID_PATTERN.test(parsedBody.data.chatId)
-      ? parsedBody.data.chatId
-      : randomUUID();
 
   const ip = getClientIp(req);
   const rateLimit = checkIpRateLimit('chat', ip, userMessage, {
@@ -127,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // If the user's message contains a supported video URL, process the
     // download as part of this same turn (reusing the exact same cache +
-    // upstream client as the main Download button) so the AI can ground its
+    // upstream client as the main Download button) so Gemini can ground its
     // reply in real data instead of guessing, and the chat UI can render
     // download buttons directly. This does NOT consume a second quota unit.
     let grounding: ChatGrounding | undefined;
@@ -148,21 +166,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       }
     }
 
-    const scopedPrompt = buildScopedPrompt(userMessage, grounding);
-    const reply = await fetchChatReply(scopedPrompt, chatId);
+    const systemInstruction = buildSystemInstruction(grounding);
+    const turns = toGeminiTurns(parsedBody.data.history, userMessage);
+    const reply = await fetchGeminiReply(systemInstruction, turns);
 
     res.status(200).json({
       success: true,
       data: {
         reply,
-        chatId,
         download: grounding?.type === 'download_success' ? grounding.result : undefined,
       },
     });
   } catch (err) {
-    if (err instanceof ChatUpstreamError) {
+    if (err instanceof GeminiError) {
+      if (err.kind === 'BLOCKED') {
+        // A safety-filtered reply is a normal conversational outcome, not a
+        // system failure — respond in-band instead of showing an error.
+        res.status(200).json({
+          success: true,
+          data: {
+            reply:
+              'Maaf, aku tidak bisa membantu untuk itu. Ada yang mau ditanyakan seputar SaveNest?',
+          },
+        });
+        return;
+      }
+      if (err.kind === 'NOT_CONFIGURED') {
+        fail(res, 503, 'UPSTREAM_ERROR', 'Fitur AI belum dikonfigurasi di situs ini.');
+        return;
+      }
       if (err.kind === 'TIMEOUT') {
         fail(res, 504, 'UPSTREAM_TIMEOUT', 'Asisten AI tidak merespon. Coba lagi.');
+        return;
+      }
+      if (err.kind === 'RATE_LIMITED') {
+        fail(res, 429, 'RATE_LIMITED', err.message);
         return;
       }
       fail(res, 502, 'UPSTREAM_ERROR', 'Gagal menghubungi asisten AI. Coba lagi.');
@@ -176,6 +214,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
 export const config = {
   api: {
-    bodyParser: { sizeLimit: '10kb' },
+    bodyParser: { sizeLimit: '30kb' }, // now also carries recent conversation history
   },
 };
