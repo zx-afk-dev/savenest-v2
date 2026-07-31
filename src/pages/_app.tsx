@@ -1,5 +1,6 @@
 import type { AppProps } from 'next/app';
 import { Sora, Inter, JetBrains_Mono } from 'next/font/google';
+import Script from 'next/script';
 import { useEffect } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -37,6 +38,14 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <div className={`${sora.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
+      {/* Only loaded when Turnstile is actually configured — see
+          useTurnstile.ts and README's Cloudflare Turnstile section. */}
+      {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          strategy="lazyOnload"
+        />
+      )}
       <ErrorBoundary>
         <Layout>
           <Component {...pageProps} />
