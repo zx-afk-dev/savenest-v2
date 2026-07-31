@@ -23,7 +23,7 @@ export function useDownloader() {
     setState({ status: 'idle', result: null, errorMessage: null });
   }, []);
 
-  const submit = useCallback(async (rawUrl: string) => {
+  const submit = useCallback(async (rawUrl: string, turnstileToken?: string | null) => {
     setState({ status: 'validating', result: null, errorMessage: null });
 
     const validation = validateSupportedUrl(rawUrl);
@@ -49,7 +49,10 @@ export function useDownloader() {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
         },
-        body: JSON.stringify({ url: validation.normalizedUrl }),
+        body: JSON.stringify({
+          url: validation.normalizedUrl,
+          ...(turnstileToken ? { turnstileToken } : {}),
+        }),
         signal: controller.signal,
       });
 

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatApiResponse, DownloadResult } from '@/types';
+import { useCallback, useEffect, useState } from 'react';
+import type { ChatApiResponse, ChatHistoryItem, DownloadResult } from '@/types';
 
 export interface ChatMessage {
   id: string;
@@ -8,91 +8,113 @@ export interface ChatMessage {
   download?: DownloadResult;
 }
 
-const CHAT_ID_STORAGE_KEY = 'savenest:chatId';
+const MESSAGES_STORAGE_KEY = 'savenest:chatMessages';
+const MAX_STORED_MESSAGES = 20;
+const MAX_HISTORY_SENT = 8;
 
-function getOrCreateChatId(): string {
-  if (typeof window === 'undefined') return '';
+function loadStoredMessages(): ChatMessage[] {
+  if (typeof window === 'undefined') return [];
   try {
-    const existing = window.localStorage.getItem(CHAT_ID_STORAGE_KEY);
-    if (existing) return existing;
-    const fresh = crypto.randomUUID();
-    window.localStorage.setItem(CHAT_ID_STORAGE_KEY, fresh);
-    return fresh;
+    const raw = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
   } catch {
-    // Storage may be unavailable (private browsing, disabled cookies, etc.)
-    // — fall back to an in-memory id that just won't survive a page reload.
-    return crypto.randomUUID();
+    return [];
+  }
+}
+
+function persistMessages(messages: ChatMessage[]): void {
+  try {
+    window.localStorage.setItem(
+      MESSAGES_STORAGE_KEY,
+      JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)),
+    );
+  } catch {
+    // Storage may be unavailable (private browsing, quota, etc.) — the
+    // conversation just won't survive a page reload, which is non-fatal.
   }
 }
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const chatIdRef = useRef<string>('');
+  const [hydrated, setHydrated] = useState(false);
 
+  // Load any previous conversation once, client-side only (avoids SSR
+  // hydration mismatches since localStorage doesn't exist on the server).
   useEffect(() => {
-    chatIdRef.current = getOrCreateChatId();
+    setMessages(loadStoredMessages());
+    setHydrated(true);
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
+  useEffect(() => {
+    if (!hydrated) return;
+    persistMessages(messages);
+  }, [messages, hydrated]);
 
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
+  const sendMessage = useCallback(
+    async (text: string, turnstileToken?: string | null) => {
+      const trimmed = text.trim();
+      if (!trimmed || isLoading) return;
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({ message: trimmed, chatId: chatIdRef.current }),
-      });
+      const history: ChatHistoryItem[] = messages
+        .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role !== 'system')
+        .slice(-MAX_HISTORY_SENT)
+        .map((m) => ({ role: m.role, content: m.content }));
 
-      const payload = (await response.json()) as ChatApiResponse;
+      const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed };
+      setMessages((prev) => [...prev, userMsg]);
+      setIsLoading(true);
 
-      if (!payload.success) {
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            message: trimmed,
+            history,
+            ...(turnstileToken ? { turnstileToken } : {}),
+          }),
+        });
+
+        const payload = (await response.json()) as ChatApiResponse;
+
+        if (!payload.success) {
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: 'system', content: payload.message },
+          ]);
+          return;
+        }
+
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: 'system', content: payload.message },
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: payload.data.reply,
+            download: payload.data.download,
+          },
         ]);
-        return;
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
       }
-
-      if (payload.data.chatId) {
-        chatIdRef.current = payload.data.chatId;
-        try {
-          window.localStorage.setItem(CHAT_ID_STORAGE_KEY, payload.data.chatId);
-        } catch {
-          // Non-fatal — conversation just won't persist across reloads.
-        }
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: payload.data.reply,
-          download: payload.data.download,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: 'system',
-          content: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoading]);
+    },
+    [isLoading, messages],
+  );
 
   return { messages, sendMessage, isLoading };
 }
