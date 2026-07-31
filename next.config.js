@@ -2,14 +2,18 @@
 
 // Content-Security-Policy is intentionally assembled here (not just in middleware)
 // so it also protects statically-generated / cached pages on Netlify's CDN edge.
+// challenges.cloudflare.com is allowlisted for the optional Turnstile widget
+// (see src/hooks/useTurnstile.ts) — harmless to keep even if Turnstile is
+// never configured, since the script/frame just won't be requested.
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline';
+  script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https:;
   media-src 'self' https:;
   font-src 'self' data:;
-  connect-src 'self';
+  connect-src 'self' https://challenges.cloudflare.com;
+  frame-src https://challenges.cloudflare.com;
   frame-ancestors 'none';
   base-uri 'self';
   form-action 'self';

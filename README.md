@@ -109,7 +109,7 @@ variable server (`DOWNLOAD_API_KEY`) dan dipakai di `src/lib/api/blckrose.ts`.
 | Rate Limiter / IP Rate Limiter | `src/lib/security/ipRateLimiter.ts` — sliding window per-IP |
 | Cooldown / Duplicate Request Detection / Queue-ish behavior | field `lastUrlHash` + `inFlight` di record yang sama |
 | Request Validator / Header Validation | `src/lib/security/requestGuards.ts` → `validateHeaders` |
-| Origin Validation / Referer Validation | `validateOriginAndReferer` |
+| Origin Validation / Referer Validation | `validateOriginAndReferer` — trusts whatever domain is actually serving the request (via Host header), so it works on any deployment URL without manual config |
 | Bot Detection / User-Agent Validation | `detectBot` (heuristik UA + header `X-Requested-With`) |
 | Debounce / Anti Auto-Click / Anti Flood | `useDebouncedCallback` di client (`src/hooks/useDebounce.ts`) sebelum request dikirim |
 | Request Timeout / Abort Controller | `AbortController` + timeout 15s di `blckrose.ts` |
@@ -121,11 +121,55 @@ variable server (`DOWNLOAD_API_KEY`) dan dipakai di `src/lib/api/blckrose.ts`.
 | Anti Script Injection | React escaping default + CSP + sanitisasi input |
 | Global Limit | `globalQuota.ts` (lihat bagian di atas) |
 
-Beberapa item di brief (mis. "Cloudflare Friendly", "Slowdown", "Queue Processing") bersifat lebih
-ke arah *pola arsitektur* daripada modul terpisah — pola tersebut sudah tercermin lewat kombinasi
-rate limiter + cooldown + timeout + validasi berlapis di atas, dan akan otomatis mendapat manfaat
-tambahan dari proteksi bawaan Netlify/Cloudflare di depan (WAF, DDoS protection) jika diaktifkan di
-level DNS/CDN.
+Beberapa item di brief (mis. "Slowdown", "Queue Processing") bersifat lebih ke arah *pola
+arsitektur* daripada modul terpisah — pola tersebut sudah tercermin lewat kombinasi rate limiter +
+cooldown + timeout + validasi berlapis di atas. "Cloudflare Friendly" sekarang diimplementasikan
+secara konkret lewat Cloudflare Turnstile — lihat bagian di bawah.
+
+---
+
+## 🤖🛡️ Cloudflare Turnstile (Opsional, Tanpa Bikin Pengguna Nunggu)
+
+Lapisan anti-bot tambahan di atas semua yang sudah ada di tabel atas. **Sepenuhnya opt-in** — kalau
+env var-nya tidak diisi, seluruh fitur ini nonaktif otomatis dan situs berjalan normal seperti
+sebelumnya. Dipasang di form Download dan chat widget.
+
+**Soal kekhawatiran "pengguna males nunggu/pencet centang" — ini yang perlu diketahui:**
+
+Turnstile itu **bukan** reCAPTCHA versi lama yang selalu menampilkan kotak centang. ada 3 mode widget
+yang dipilih saat bikin site key di dashboard Cloudflare:
+
+| Mode | Yang dilihat pengguna |
+| --- | --- |
+| **Managed** (rekomendasi default Cloudflare) | Hampir selalu **tidak ada apa-apa** — verifikasi jalan diam-diam di background. Cloudflare sendiri melaporkan mayoritas besar pengunjung lolos tanpa interaksi sama sekali. Hanya trafik yang sudah terlihat mencurigakan yang sesekali diminta klik centang. |
+| **Invisible** | **Tidak pernah** menampilkan apa pun, titik. Verifikasi 100% di background. |
+| **Non-interactive** | Selalu muncul badge kecil (biar sesuai syarat branding Cloudflare), tapi tidak pernah perlu diklik. |
+
+Untuk kekhawatiran kamu, pilih **Managed** (default, paling seimbang) atau **Invisible** (paling
+"tak kelihatan") saat membuat site key — bukan sesuatu yang diatur lewat kode, tapi lewat dashboard
+Cloudflare saat pembuatan key. Kode di proyek ini sudah kompatibel dengan mode mana pun, tidak perlu
+diubah.
+
+**Cara kerja teknisnya:** widget dirender ke elemen tersembunyi (lihat `useTurnstile.ts`) begitu
+halaman dimuat, dan sudah menghasilkan token *sebelum* pengguna selesai mengetik/menempel URL —
+jadi tidak ada delay tambahan yang terasa saat klik Download/Kirim. Token itu dikirim bareng request,
+diverifikasi di server (`src/lib/security/turnstile.ts`) lewat endpoint resmi Cloudflare
+`siteverify`. Kalau gagal terverifikasi, request ditolak dengan pesan yang jelas dan widget otomatis
+di-reset supaya token baru siap untuk percobaan berikutnya.
+
+**Setup:**
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Turnstile** → **Add site**.
+2. Pilih widget mode **Managed** atau **Invisible** (lihat tabel di atas).
+3. Copy **Site Key** → isi `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Copy **Secret Key** → isi
+   `TURNSTILE_SECRET_KEY`. Kedua env var ini harus diisi bersamaan (kalau cuma satu yang diisi,
+   fiturnya tidak akan berfungsi dengan benar).
+
+**Alternatif lain kalau tidak mau widget sama sekali** (di luar cakupan kode proyek ini, diatur di
+level DNS): arahkan DNS domain kamu lewat Cloudflare (gratis) dan aktifkan **Bot Fight Mode** —
+proteksi di level jaringan, sepenuhnya transparan untuk pengguna asli, tanpa widget apa pun yang
+perlu dipasang di kode. Ini lebih "berat" untuk disiapkan (perlu pindah nameserver) tapi cocok kalau
+kamu ingin proteksi di depan Netlify tanpa sentuh kode sama sekali.
 
 ---
 
@@ -144,6 +188,92 @@ diubah.
 
 ---
 
+---
+
+## 🤖 AI Support Chat
+
+Widget chat mengambang (pojok kanan bawah, muncul di semua halaman) yang menjawab pertanyaan
+seputar SaveNest saja, dan bisa langsung memproses link video yang dikirim di dalam chat. Ditenagai
+oleh **Gemini API resmi** (Google AI Studio, free tier) — bukan API pihak ketiga tak resmi.
+
+**Setup wajib:** ambil API key gratis di
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey) (tinggal masuk dengan akun Google,
+tanpa kartu kredit), lalu isi `GEMINI_API_KEY` di `.env` (lokal) / environment variables Netlify
+(production). Tanpa ini, chat akan merespons dengan pesan "fitur AI belum dikonfigurasi" — fitur
+lain di situs tetap berjalan normal.
+
+**Arsitektur:**
+
+- `src/pages/api/chat.ts` — endpoint internal, melewati pipeline keamanan yang sama persis dengan
+  `/api/download` (validasi header/origin/bot, rate limiter — bucket terpisah bernama `"chat"` lewat
+  `src/lib/security/ipRateLimiter.ts` yang mendukung beberapa bucket independen).
+- `src/lib/api/gemini.ts` — client server-only untuk Gemini `generateContent` API. API key hanya
+  hidup di `GEMINI_API_KEY` (env var), tidak pernah dikirim ke browser. Model default
+  `gemini-3.5-flash` (cepat & gratis), bisa diganti lewat `GEMINI_MODEL` kalau Google mengganti nama
+  model tier gratisnya lagi di masa depan (ini cukup sering terjadi).
+- `src/lib/ai/scopedPrompt.ts` — membangun instruksi pembatas topik yang dikirim lewat field
+  **`systemInstruction`** asli milik Gemini — pemisahan peran system/user yang sungguhan dijamin oleh
+  model, bukan sekadar digabung ke teks prompt seperti integrasi sebelumnya.
+- **Stateless, tanpa `chatId`:** API Gemini tidak menyimpan riwayat percakapan di sisi mereka —
+  setiap request harus menyertakan histori percakapan sendiri. `useChat.ts` menyimpan riwayat chat
+  (dibatasi 20 pesan terakhir) di `localStorage` browser pengguna, dan mengirim ±8 giliran terakhir
+  sebagai konteks di setiap request. Tidak ada database/akun di sisi kita — dan sebagai bonus,
+  percakapan sekarang tetap ada meski halaman di-refresh (sebelumnya hilang).
+- **Membantu download di dalam chat:** kalau pesan pengguna mengandung URL TikTok/Instagram/YouTube
+  (`extractSupportedUrl` di `urlValidator.ts`), `api/chat.ts` memproses video itu lewat infrastruktur
+  yang sama dengan tombol Download (cache 10 menit + `fetchFromUpstream`), lalu menyuntikkan hasilnya
+  (judul, platform, daftar media) ke dalam `systemInstruction` sebagai konteks tambahan — supaya
+  balasan Gemini akurat berdasarkan data asli, bukan mengarang. Hasil download itu juga dikirim balik
+  ke frontend dan ditampilkan sebagai kartu hasil (tombol Download/Copy Link/Preview) langsung di
+  dalam bubble chat.
+- **Kuota global bersama:** setiap giliran chat (baik hanya tanya-jawab maupun yang memicu download)
+  mengonsumsi 1 unit dari kuota harian 60/hari yang sama dengan tombol Download utama — chat tidak
+  bisa dipakai untuk melewati batas harian.
+- **Balasan yang diblokir filter keamanan Gemini** (mis. karena konten sensitif) ditangani secara
+  halus — pengguna tetap mendapat balasan sopan di dalam chat ("maaf, aku tidak bisa membantu untuk
+  itu..."), bukan pesan error yang menakutkan.
+
+**Batas free tier:** berubah-ubah dari waktu ke waktu (biasanya berkisar puluhan request/menit dan
+ratusan–ribuan/hari untuk model Flash) — cek dashboard [Google AI Studio](https://aistudio.google.com)
+untuk angka terkini akun kamu. Kalau limit tercapai, chat akan merespons dengan pesan yang jelas
+("batas pemakaian gratis tercapai") alih-alih error teknis.
+
+---
+
+## 🔍 Supaya Terdeteksi Stabil di Yahoo / Bing / DuckDuckGo
+
+Penting untuk diketahui: **Yahoo Search sudah memakai indeks Bing sejak 2010** — tidak ada lagi
+sistem webmaster/verifikasi terpisah khusus Yahoo. Begitu juga DuckDuckGo. Jadi satu langkah
+verifikasi di **Bing Webmaster Tools** otomatis mencakup ketiganya (Yahoo, Bing, dan DuckDuckGo).
+Situs/tutorial lama yang menyebut "submit ke Yahoo Site Explorer" sudah tidak berlaku lagi.
+
+File-file yang sudah disiapkan di proyek ini untuk mendukung ini:
+
+- **`/robots.txt`** dan **`/sitemap.xml`** — sudah dihasilkan otomatis oleh
+  `src/pages/robots.txt.tsx` dan `src/pages/sitemap.xml.tsx`, dan robots.txt sudah mengizinkan semua
+  crawler (termasuk `bingbot`) mengakses seluruh halaman kecuali `/api/*`.
+- **`public/BingSiteAuth.xml`** — placeholder untuk metode verifikasi "XML file". Ganti isinya
+  dengan file asli yang kamu unduh dari Bing Webmaster Tools (instruksi lengkap ada di komentar
+  dalam file itu sendiri).
+- **Meta tag alternatif** — kalau lebih suka metode "meta tag" daripada upload file, isi env var
+  `NEXT_PUBLIC_BING_SITE_VERIFICATION` di `.env` dengan kode dari Bing, dan tag
+  `<meta name="msvalidate.01">` akan otomatis muncul di `_document.tsx`. (Pola yang sama juga
+  tersedia untuk Google Search Console lewat `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION`, kalau mau.)
+
+**Langkah setelah deploy:**
+
+1. Buka [Bing Webmaster Tools](https://www.bing.com/webmasters), tambahkan `https://savenest.web.id`.
+2. Verifikasi lewat salah satu metode di atas (XML file atau meta tag) — pilih salah satu saja.
+3. Setelah terverifikasi, buka menu **Sitemaps**, submit `https://savenest.web.id/sitemap.xml`.
+4. (Opsional, untuk indexing lebih cepat) Aktifkan **IndexNow** dari dashboard Bing Webmaster
+   Tools — ini protokol modern pengganti "ping" lama, membuat halaman baru/berubah terindeks lebih
+   cepat di Bing/Yahoo tanpa menunggu crawl terjadwal.
+
+Proses indexing biasanya makan waktu beberapa minggu setelah verifikasi & submit sitemap — ini
+normal dan di luar kendali kode di proyek ini.
+
+---
+
 ## 🗂️ Struktur Proyek
 
 ```
@@ -153,20 +283,22 @@ savenest/
 │   └── generate-icons.py    # generator icon/OG image (Pillow, offline)
 ├── src/
 │   ├── components/
-│   │   ├── common/          # Button, GlassCard, Skeleton, ErrorBoundary
+│   │   ├── chat/             # ChatWidget (AI support, floating)
+│   │   ├── common/          # Button, GlassCard, Skeleton, ErrorBoundary, InlineMarkdown
 │   │   ├── home/             # Hero, DownloaderForm, ResultCard, FAQ, dst.
 │   │   ├── layout/            # Header, Footer, Layout, SEO, PageShell
 │   │   └── loading/           # DownloadLoadingOverlay
-│   ├── hooks/                 # useDownloader, useGlobalStats, useDebounce
+│   ├── hooks/                 # useDownloader, useGlobalStats, useDebounce, useChat, useTurnstile
 │   ├── lib/
-│   │   ├── api/                # client upstream (blckrose.ts)
+│   │   ├── ai/                  # scopedPrompt.ts (pembatas topik AI)
+│   │   ├── api/                # client upstream (blckrose.ts, gemini.ts)
 │   │   ├── cache/              # cache store (Netlify Blobs)
-│   │   ├── security/           # validator URL, rate limiter, guards
+│   │   ├── security/           # validator URL, rate limiter, guards, turnstile.ts
 │   │   ├── store/               # blobStore + globalQuota
 │   │   ├── constants.ts
 │   │   └── seo.ts
 │   ├── pages/
-│   │   ├── api/                 # download.ts, stats.ts
+│   │   ├── api/                 # download.ts, stats.ts, chat.ts
 │   │   ├── index.tsx, about.tsx, faq.tsx, terms.tsx, privacy.tsx,
 │   │   │   contact.tsx, dmca.tsx, disclaimer.tsx, tqto.tsx, 404.tsx
 │   │   ├── sitemap.xml.tsx, robots.txt.tsx
@@ -193,8 +325,12 @@ savenest/
   yang mungkin lolos. Bug yang muncul kemungkinan besar berupa hal remeh (import yang salah ketik,
   dst.), bukan kesalahan arsitektur.
 - Icon & gambar OG dihasilkan secara programatik (`scripts/generate-icons.py`) sebagai placeholder
-  bermerek yang layak pakai — ganti dengan aset desain final kapan pun kamu siap
-  (`python3 scripts/generate-icons.py` untuk generate ulang setelah mengedit script).
+  bermerek yang layak pakai — ganti dengan aset desain final kapan pun kamu siap. Script ini murni
+  dev tool (tidak dijalankan saat build/deploy), butuh Python + Pillow:
+  ```bash
+  pip install -r scripts/requirements.txt
+  python3 scripts/generate-icons.py
+  ```
 - Rate limiter per-IP bersifat in-memory per instance Function (lihat komentar di
   `ipRateLimiter.ts`) — cukup untuk membendung abuse dari satu klien, tapi bukan pengganti kuota
   global (yang durable lewat Netlify Blobs).
