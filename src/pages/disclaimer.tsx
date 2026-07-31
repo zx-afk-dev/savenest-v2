@@ -25,7 +25,7 @@ const DisclaimerPage: NextPage = () => {
             Tidak bertanggung jawab atas cara pengguna memanfaatkan konten yang diunduh. Tanggung
             jawab hukum atas penggunaan konten sepenuhnya berada di tangan pengguna.
           </li>
-          <li>Disediakan "sebagaimana adanya" tanpa jaminan ketersediaan atau keakuratan data.</li>
+          <li>Disediakan “sebagaimana adanya” tanpa jaminan ketersediaan atau keakuratan data.</li>
         </ul>
         <p>
           Pengguna diimbau untuk hanya mengunduh konten yang mereka miliki hak atasnya, atau yang

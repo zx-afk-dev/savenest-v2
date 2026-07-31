@@ -1,4 +1,5 @@
 import type { NextPage } from 'next';
+import Link from 'next/link';
 import { SEO } from '@/components/layout/SEO';
 import { PageShell } from '@/components/layout/PageShell';
 import { breadcrumbSchema } from '@/lib/seo';
@@ -40,9 +41,9 @@ const ContactPage: NextPage = () => {
           </a>
           <p className="max-w-sm text-xs text-ink-800/50">
             Untuk laporan pelanggaran hak cipta, silakan gunakan halaman{' '}
-            <a href="/dmca" className="font-semibold text-brand-700 underline">
+            <Link href="/dmca" className="font-semibold text-brand-700 underline">
               DMCA
-            </a>{' '}
+            </Link>{' '}
             agar diproses lebih cepat.
           </p>
         </div>
