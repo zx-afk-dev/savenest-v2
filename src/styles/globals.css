@@ -60,29 +60,30 @@
   }
 }
 
-/* Two-frame blocky "marching" leg cycle for the pixel-chibi courier in
-   DownloadLoadingOverlay. Kept outside @layer since Tailwind's arbitrary
-   `animate-[...]` values only need a matching @keyframes name to exist
-   somewhere in the compiled CSS. */
-@keyframes walk-leg-a {
+/* Limb-swing cycle for the 3D voxel courier in DownloadLoadingOverlay.tsx —
+   applied via inline `style={{ animation: '...' }}` on each limb's pivot
+   wrapper (rotating around the shoulder/hip via `transform-origin: top`),
+   so left/right pairs alternate just by offsetting animation-delay by half
+   the period. Kept as plain CSS (not Tailwind's keyframes/animation config)
+   since inline `animation` styles just need a matching @keyframes name to
+   exist somewhere in the compiled CSS. */
+@keyframes leg-swing {
   0%,
-  49% {
-    transform: translateY(0) scaleY(1);
-  }
-  50%,
   100% {
-    transform: translateY(-1px) scaleY(0.85);
+    transform: rotateX(24deg);
+  }
+  50% {
+    transform: rotateX(-24deg);
   }
 }
 
-@keyframes walk-leg-b {
+@keyframes arm-swing {
   0%,
-  49% {
-    transform: translateY(-1px) scaleY(0.85);
-  }
-  50%,
   100% {
-    transform: translateY(0) scaleY(1);
+    transform: rotateX(-18deg);
+  }
+  50% {
+    transform: rotateX(18deg);
   }
 }
 
