@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useDownloader } from '@/hooks/useDownloader';
 import { useDebouncedCallback } from '@/hooks/useDebounce';
+import { useTurnstile } from '@/hooks/useTurnstile';
 import { validateSupportedUrl } from '@/lib/security/urlValidator';
 import { DownloadLoadingOverlay } from '@/components/loading/DownloadLoadingOverlay';
 import { ResultCard } from '@/components/home/ResultCard';
@@ -11,9 +12,13 @@ export function DownloaderForm() {
   const [inputValue, setInputValue] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const { status, result, errorMessage, submit, reset } = useDownloader();
+  const turnstile = useTurnstile();
 
   const debouncedSubmit = useDebouncedCallback((url: string) => {
-    void submit(url);
+    void submit(url, turnstile.token);
+    // Tokens are single-use — get a fresh one ready in the background for
+    // next time. A no-op when Turnstile isn't configured.
+    turnstile.reset();
   }, 1200);
 
   function handleSubmit(e: FormEvent) {
@@ -47,6 +52,12 @@ export function DownloaderForm() {
 
   return (
     <div className="w-full">
+      {/* Cloudflare Turnstile mounts here. With "Managed" or "Invisible" mode
+          (see README) this renders nothing visible for the vast majority of
+          visitors — verification happens silently in the background while
+          they're still typing/pasting the URL. */}
+      <div ref={turnstile.containerRef} />
+
       <form onSubmit={handleSubmit} className="glass-panel-strong p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
