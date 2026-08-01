@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { NAV_LINKS, SITE_NAME } from '@/lib/constants';
 
@@ -11,11 +12,13 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-white/40 bg-mist-50/80 backdrop-blur-lg">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
         <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
-          <img
+          <Image
             src="/icons/icon-96.png"
             alt=""
             width={36}
             height={36}
+            priority
+            unoptimized
             className="h-9 w-9 rounded-2xl"
           />
           <span className="font-display text-lg font-bold text-ink-900">{SITE_NAME}</span>
